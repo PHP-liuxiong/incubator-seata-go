@@ -63,6 +63,7 @@ type NacosConfig struct {
 	Application string `yaml:"application" json:"application" koanf:"application"`
 	ServerAddr  string `yaml:"server-addr" json:"server-addr" koanf:"server-addr"`
 	Group       string `yaml:"group" json:"group" koanf:"group"`
+	Cluster     string `yaml:"cluster" json:"cluster" koanf:"cluster"`
 	Namespace   string `yaml:"namespace" json:"namespace" koanf:"namespace"`
 	Username    string `yaml:"username" json:"username" koanf:"username"`
 	Password    string `yaml:"password" json:"password" koanf:"password"`
@@ -71,9 +72,10 @@ type NacosConfig struct {
 }
 
 func (cfg *NacosConfig) RegisterFlagsWithPrefix(prefix string, f *flag.FlagSet) {
-	f.StringVar(&cfg.Application, prefix+".application", "seata", "The application name of registry.")
+	f.StringVar(&cfg.Application, prefix+".application", "seata-server", "The application name of registry.")
 	f.StringVar(&cfg.ServerAddr, prefix+".server-addr", "", "The server address of registry.")
 	f.StringVar(&cfg.Group, prefix+".group", "SEATA_GROUP", "The group of registry.")
+	f.StringVar(&cfg.Cluster, prefix+".cluster", "default", "The cluster of registry.")
 	f.StringVar(&cfg.Namespace, prefix+".namespace", "", "The namespace of registry.")
 	f.StringVar(&cfg.Username, prefix+".username", "", "The username of registry.")
 	f.StringVar(&cfg.Password, prefix+".password", "", "The password of registry.")
