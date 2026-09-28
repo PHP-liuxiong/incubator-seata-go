@@ -69,6 +69,7 @@ type NacosConfig struct {
 	Password    string `yaml:"password" json:"password" koanf:"password"`
 	AccessKey   string `yaml:"access-key" json:"access-key" koanf:"access-key"`
 	SecretKey   string `yaml:"secret-key" json:"secret-key" koanf:"secret-key"`
+	RamRoleName string `yaml:"ram-role-name" json:"ram-role-name" koanf:"ram-role-name"`
 }
 
 func (cfg *NacosConfig) RegisterFlagsWithPrefix(prefix string, f *flag.FlagSet) {
@@ -81,6 +82,7 @@ func (cfg *NacosConfig) RegisterFlagsWithPrefix(prefix string, f *flag.FlagSet) 
 	f.StringVar(&cfg.Password, prefix+".password", "", "The password of registry.")
 	f.StringVar(&cfg.AccessKey, prefix+".access-key", "", "The access key of registry.")
 	f.StringVar(&cfg.SecretKey, prefix+".secret-key", "", "The secret key of registry.")
+	f.StringVar(&cfg.RamRoleName, prefix+".ram-role-name", "", "The Alibaba Cloud RAM role name of registry.")
 }
 
 type Etcd3Config struct {

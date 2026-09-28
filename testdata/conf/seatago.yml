@@ -133,6 +133,7 @@ seata:
       ##if use MSE Nacos with auth, mutex with username/password attribute  #
       access-key: "test-access-key"  #
       secret-key: "test-secret-key"  #
+      ram-role-name: "test-ram-role-name"
     etcd3:
       cluster: "default"
       server-addr: "http://localhost:2379"

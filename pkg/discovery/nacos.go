@@ -61,6 +61,11 @@ func newNacosRegistryService(serviceConfig *ServiceConfig, config *NacosConfig) 
 	if config.SecretKey != "" {
 		clientOptions = append(clientOptions, constant.WithSecretKey(config.SecretKey))
 	}
+	if config.RamRoleName != "" {
+		clientOptions = append(clientOptions, constant.WithRamConfig(&constant.RamConfig{
+			RamRoleName: config.RamRoleName,
+		}))
+	}
 
 	client, err := clients.NewNamingClient(vo.NacosClientParam{
 		ClientConfig: constant.NewClientConfig(clientOptions...),

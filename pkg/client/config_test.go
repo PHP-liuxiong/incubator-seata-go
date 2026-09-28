@@ -123,6 +123,7 @@ func TestLoadPath(t *testing.T) {
 	assert.Equal(t, "test-password", cfg.RegistryConfig.Nacos.Password)
 	assert.Equal(t, "test-access-key", cfg.RegistryConfig.Nacos.AccessKey)
 	assert.Equal(t, "test-secret-key", cfg.RegistryConfig.Nacos.SecretKey)
+	assert.Equal(t, "test-ram-role-name", cfg.RegistryConfig.Nacos.RamRoleName)
 	assert.Equal(t, "default", cfg.RegistryConfig.Etcd3.Cluster)
 	assert.Equal(t, "http://localhost:2379", cfg.RegistryConfig.Etcd3.ServerAddr)
 
