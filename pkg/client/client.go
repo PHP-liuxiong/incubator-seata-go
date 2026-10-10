@@ -77,12 +77,12 @@ func initRemoting(cfg *Config) {
 func initRmClient(cfg *Config) {
 	onceInitRmClient.Do(func() {
 		log.Init()
-		initRemoting(cfg)
 		rm.InitRm(rm.RmConfig{
 			Config:         cfg.ClientConfig.RmConfig,
 			ApplicationID:  cfg.ApplicationID,
 			TxServiceGroup: cfg.TxServiceGroup,
 		})
+		initRemoting(cfg)
 		config.Init(cfg.ClientConfig.RmConfig.LockConfig)
 		client.RegisterProcessor()
 		integration.Init()

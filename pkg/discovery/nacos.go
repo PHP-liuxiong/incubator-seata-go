@@ -22,17 +22,28 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
-	"github.com/nacos-group/nacos-sdk-go/v2/clients/naming_client"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
+type nacosNamingClient interface {
+	SelectInstances(param vo.SelectInstancesParam) ([]model.Instance, error)
+	Subscribe(param *vo.SubscribeParam) error
+	Unsubscribe(param *vo.SubscribeParam) error
+	CloseClient()
+}
+
 type NacosRegistryService struct {
-	client        naming_client.INamingClient
-	config        NacosConfig
-	serviceConfig *ServiceConfig
+	client          nacosNamingClient
+	config          NacosConfig
+	serviceConfig   *ServiceConfig
+	subscriptions   map[*registryChangeSubscription]struct{}
+	subscriptionsMu sync.Mutex
+	closed          bool
 }
 
 func newNacosRegistryService(serviceConfig *ServiceConfig, config *NacosConfig) (RegistryService, error) {
@@ -81,10 +92,89 @@ func newNacosRegistryService(serviceConfig *ServiceConfig, config *NacosConfig) 
 		client:        client,
 		config:        *config,
 		serviceConfig: serviceConfig,
+		subscriptions: make(map[*registryChangeSubscription]struct{}),
 	}, nil
 }
 
 func (s *NacosRegistryService) Lookup(key string) ([]*ServiceInstance, error) {
+	serviceName, groupName, clusters := s.serviceQuery(key)
+
+	instances, err := s.client.SelectInstances(vo.SelectInstancesParam{
+		ServiceName: serviceName,
+		GroupName:   groupName,
+		Clusters:    clusters,
+		HealthyOnly: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("lookup nacos service %q: %w", serviceName, err)
+	}
+	converted, err := convertNacosInstances(serviceName, instances)
+	if err != nil {
+		return nil, err
+	}
+	if len(converted) == 0 {
+		return nil, fmt.Errorf("nacos service %q has no healthy instances", serviceName)
+	}
+	return converted, nil
+}
+
+func (s *NacosRegistryService) Subscribe(key string, listener RegistryChangeListener) (RegistrySubscription, error) {
+	if listener == nil {
+		return nil, fmt.Errorf("nacos registry change listener is nil")
+	}
+
+	serviceName, groupName, clusters := s.serviceQuery(key)
+	subscription := newRegistryChangeSubscription(listener)
+	param := &vo.SubscribeParam{
+		ServiceName: serviceName,
+		GroupName:   groupName,
+		Clusters:    clusters,
+		SubscribeCallback: func(instances []model.Instance, err error) {
+			if err != nil {
+				return
+			}
+			converted, convertErr := convertNacosInstances(serviceName, instances)
+			if convertErr != nil {
+				return
+			}
+			subscription.publish(RegistryChangeEvent{Key: key, Instances: converted})
+		},
+	}
+	if err := s.client.Subscribe(param); err != nil {
+		return nil, fmt.Errorf("subscribe nacos service %q: %w", serviceName, err)
+	}
+
+	initial, err := s.Lookup(key)
+	if err != nil {
+		_ = s.client.Unsubscribe(param)
+		return nil, err
+	}
+	subscription.initialize(RegistryChangeEvent{Key: key, Instances: initial}, func() {
+		_ = s.client.Unsubscribe(param)
+		s.removeSubscription(subscription)
+	})
+	s.subscriptionsMu.Lock()
+	if s.closed {
+		s.subscriptionsMu.Unlock()
+		subscription.Unsubscribe()
+		return nil, fmt.Errorf("nacos registry service is closed")
+	}
+	if s.subscriptions == nil {
+		s.subscriptions = make(map[*registryChangeSubscription]struct{})
+	}
+	s.subscriptions[subscription] = struct{}{}
+	s.subscriptionsMu.Unlock()
+	subscription.start()
+	return subscription, nil
+}
+
+func (s *NacosRegistryService) removeSubscription(subscription *registryChangeSubscription) {
+	s.subscriptionsMu.Lock()
+	delete(s.subscriptions, subscription)
+	s.subscriptionsMu.Unlock()
+}
+
+func (s *NacosRegistryService) serviceQuery(key string) (string, string, []string) {
 	serviceName := s.config.Application
 	if serviceName == "" {
 		serviceName = "seata-server"
@@ -103,23 +193,16 @@ func (s *NacosRegistryService) Lookup(key string) ([]*ServiceInstance, error) {
 	if cluster == "" {
 		cluster = "default"
 	}
-	clusters := []string(nil)
-	if cluster != "" {
-		clusters = []string{cluster}
-	}
+	return serviceName, groupName, []string{cluster}
+}
 
-	instances, err := s.client.SelectInstances(vo.SelectInstancesParam{
-		ServiceName: serviceName,
-		GroupName:   groupName,
-		Clusters:    clusters,
-		HealthyOnly: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("lookup nacos service %q: %w", serviceName, err)
-	}
+func convertNacosInstances(serviceName string, instances []model.Instance) ([]*ServiceInstance, error) {
 
 	result := make([]*ServiceInstance, 0, len(instances))
 	for _, instance := range instances {
+		if !instance.Healthy || !instance.Enable || instance.Weight <= 0 {
+			continue
+		}
 		if instance.Ip == "" || instance.Port == 0 {
 			continue
 		}
@@ -131,13 +214,26 @@ func (s *NacosRegistryService) Lookup(key string) ([]*ServiceInstance, error) {
 			Port: int(instance.Port),
 		})
 	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("nacos service %q has no healthy instances", serviceName)
-	}
 	return result, nil
 }
 
 func (s *NacosRegistryService) Close() {
+	s.subscriptionsMu.Lock()
+	if s.closed {
+		s.subscriptionsMu.Unlock()
+		return
+	}
+	s.closed = true
+	subscriptions := make([]*registryChangeSubscription, 0, len(s.subscriptions))
+	for subscription := range s.subscriptions {
+		subscriptions = append(subscriptions, subscription)
+	}
+	s.subscriptions = nil
+	s.subscriptionsMu.Unlock()
+
+	for _, subscription := range subscriptions {
+		subscription.Unsubscribe()
+	}
 	if s.client != nil {
 		s.client.CloseClient()
 	}

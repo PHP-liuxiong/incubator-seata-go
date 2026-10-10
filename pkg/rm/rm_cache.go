@@ -55,3 +55,40 @@ func (d *ResourceManagerCache) GetResourceManager(branchType branch.BranchType) 
 	}
 	return rm.(ResourceManager)
 }
+
+// RegisterCachedResources re-registers all resources with their resource
+// managers after a remoting session is recreated. The TC associates resource
+// registrations with the current client session, so a new session must repeat
+// the registrations that were made before the connection was closed.
+func (d *ResourceManagerCache) RegisterCachedResources() error {
+	var firstErr error
+	d.resourceManagerMap.Range(func(_, value interface{}) bool {
+		resourceManager, ok := value.(ResourceManager)
+		if !ok || resourceManager == nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("invalid resource manager cache entry: %T", value)
+			}
+			return true
+		}
+
+		resources := resourceManager.GetCachedResources()
+		if resources == nil {
+			return true
+		}
+		resources.Range(func(_, value interface{}) bool {
+			resource, ok := value.(Resource)
+			if !ok || resource == nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("invalid cached resource: %T", value)
+				}
+				return true
+			}
+			if err := resourceManager.RegisterResource(resource); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("register cached resource %q: %w", resource.GetResourceId(), err)
+			}
+			return true
+		})
+		return true
+	})
+	return firstErr
+}

@@ -18,6 +18,7 @@
 package rm
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -42,4 +43,20 @@ func TestGetRmCacheInstance(t *testing.T) {
 		actual := GetRmCacheInstance().GetResourceManager(branch.BranchTypeTCC)
 		assert.Equalf(t, mockResourceManager, actual, "GetRmCacheInstance()")
 	})
+}
+
+func TestRegisterCachedResources(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockResourceManager := NewMockResourceManager(ctrl)
+	mockResource := NewMockResource(ctrl)
+	resources := &sync.Map{}
+	resources.Store("resource-1", mockResource)
+
+	mockResourceManager.EXPECT().GetBranchType().Return(branch.BranchTypeTCC)
+	mockResourceManager.EXPECT().GetCachedResources().Return(resources)
+	mockResourceManager.EXPECT().RegisterResource(mockResource).Return(nil)
+
+	cache := &ResourceManagerCache{}
+	cache.RegisterResourceManager(mockResourceManager)
+	assert.NoError(t, cache.RegisterCachedResources())
 }

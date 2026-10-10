@@ -17,6 +17,8 @@
 
 package rm
 
+import "github.com/seata/seata-go/pkg/remoting/getty"
+
 var rmConfig RmConfig
 
 type RmConfig struct {
@@ -29,4 +31,5 @@ type RmConfig struct {
 // InitRmClient init seata rm client
 func InitRm(cfg RmConfig) {
 	rmConfig = cfg
+	getty.SetSessionOpenHook(GetRmCacheInstance().RegisterCachedResources)
 }

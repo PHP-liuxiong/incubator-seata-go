@@ -37,3 +37,24 @@ type RegistryService interface {
 	Lookup(key string) ([]*ServiceInstance, error)
 	Close()
 }
+
+// RegistryChangeEvent is a backend-neutral snapshot of service instances for
+// a transaction service group.
+type RegistryChangeEvent struct {
+	Key       string
+	Instances []*ServiceInstance
+}
+
+// RegistryChangeListener receives backend-neutral registry change snapshots.
+type RegistryChangeListener func(event RegistryChangeEvent)
+
+// RegistrySubscription cancels a registry change subscription.
+type RegistrySubscription interface {
+	Unsubscribe()
+}
+
+// RegistrySubscriber is an optional capability for registries that can report
+// address changes.
+type RegistrySubscriber interface {
+	Subscribe(key string, listener RegistryChangeListener) (RegistrySubscription, error)
+}

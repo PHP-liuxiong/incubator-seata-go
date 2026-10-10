@@ -63,8 +63,8 @@ func GetGettyClientHandlerInstance() *gettyClientHandler {
 func (g *gettyClientHandler) OnOpen(session getty.Session) error {
 	log.Infof("Open new getty session ")
 	g.sessionManager.registerSession(session)
-	conf := config.GetSeataConfig()
 	go func() {
+		conf := config.GetSeataConfig()
 		request := message.RegisterTMRequest{AbstractIdentifyRequest: message.AbstractIdentifyRequest{
 			Version:                 constant.SeataVersion,
 			ApplicationId:           conf.ApplicationID,
@@ -72,8 +72,13 @@ func (g *gettyClientHandler) OnOpen(session getty.Session) error {
 		}}
 		err := GetGettyRemotingClient().SendAsyncRequest(request)
 		if err != nil {
-			log.Errorf("OnOpen error: {%#v}", err.Error())
-			g.sessionManager.releaseSession(session)
+			log.Errorf("register TM on session open error: {%#v}", err)
+			g.sessionManager.handleSessionFailure(session)
+			return
+		}
+		if err = runSessionOpenHook(); err != nil {
+			log.Errorf("register cached RM resources on session open error: {%#v}", err)
+			g.sessionManager.handleSessionFailure(session)
 			return
 		}
 	}()
@@ -83,12 +88,12 @@ func (g *gettyClientHandler) OnOpen(session getty.Session) error {
 
 func (g *gettyClientHandler) OnError(session getty.Session, err error) {
 	log.Infof("session{%s} got error{%v}, will be closed.", session.Stat(), err)
-	g.sessionManager.releaseSession(session)
+	g.sessionManager.handleSessionFailure(session)
 }
 
 func (g *gettyClientHandler) OnClose(session getty.Session) {
 	log.Infof("session{%s} is closing......", session.Stat())
-	g.sessionManager.releaseSession(session)
+	g.sessionManager.handleSessionFailure(session)
 }
 
 func (g *gettyClientHandler) OnMessage(session getty.Session, pkg interface{}) {
