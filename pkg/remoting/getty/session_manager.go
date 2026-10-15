@@ -385,6 +385,16 @@ func (g *SessionManager) isServerAddressAvailable(address string) bool {
 
 func (g *SessionManager) getXid(msg interface{}) string {
 	var xid string
+	switch tmpMsg := msg.(type) {
+	case message.RpcMessage:
+		return g.getXid(tmpMsg.Body)
+	case *message.RpcMessage:
+		if tmpMsg == nil {
+			return ""
+		}
+		return g.getXid(tmpMsg.Body)
+	}
+
 	if tmpMsg, ok := msg.(message.AbstractGlobalEndRequest); ok {
 		xid = tmpMsg.Xid
 	} else if tmpMsg, ok := msg.(message.GlobalBeginRequest); ok {
@@ -394,12 +404,21 @@ func (g *SessionManager) getXid(msg interface{}) string {
 	} else if tmpMsg, ok := msg.(message.BranchReportRequest); ok {
 		xid = tmpMsg.Xid
 	} else {
-		msgType := reflect.TypeOf(msg)
 		msgValue := reflect.ValueOf(msg)
-		if msgType.Kind() == reflect.Ptr {
+		for msgValue.IsValid() && (msgValue.Kind() == reflect.Ptr || msgValue.Kind() == reflect.Interface) {
+			if msgValue.IsNil() {
+				return ""
+			}
 			msgValue = msgValue.Elem()
 		}
-		xid = msgValue.FieldByName("Xid").String()
+		if !msgValue.IsValid() || msgValue.Kind() != reflect.Struct {
+			return ""
+		}
+		xidField := msgValue.FieldByName("Xid")
+		if !xidField.IsValid() || xidField.Kind() != reflect.String {
+			return ""
+		}
+		xid = xidField.String()
 	}
 	return xid
 }
