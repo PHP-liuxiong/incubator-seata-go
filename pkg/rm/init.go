@@ -31,5 +31,5 @@ type RmConfig struct {
 // InitRmClient init seata rm client
 func InitRm(cfg RmConfig) {
 	rmConfig = cfg
-	getty.SetSessionOpenHook(GetRmCacheInstance().RegisterCachedResources)
+	getty.SetSessionOpenHook(GetRmCacheInstance().RegisterCachedResourcesOnSession)
 }

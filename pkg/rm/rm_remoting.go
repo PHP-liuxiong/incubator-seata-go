@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 
+	dubboGetty "github.com/apache/dubbo-getty"
 	"github.com/pkg/errors"
 
 	"github.com/seata/seata-go/pkg/protocol/message"
@@ -116,6 +117,28 @@ func (r *RMRemoting) LockQuery(param LockQueryParam) (bool, error) {
 }
 
 func (r *RMRemoting) RegisterResource(resource Resource) error {
+	sessions := getty.GetActiveSessions()
+	if len(sessions) == 0 {
+		return r.registerResourceOnSession(resource, nil)
+	}
+
+	var firstErr error
+	for _, session := range sessions {
+		if err := r.RegisterResourceOnSession(resource, session); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// RegisterResourceOnSession registers a resource on one specific Seata Server
+// connection. A RegisterRMRequest has no XID, so it cannot be routed by the
+// XID load balancer.
+func (r *RMRemoting) RegisterResourceOnSession(resource Resource, session dubboGetty.Session) error {
+	return r.registerResourceOnSession(resource, session)
+}
+
+func (r *RMRemoting) registerResourceOnSession(resource Resource, session dubboGetty.Session) error {
 	req := message.RegisterRMRequest{
 		AbstractIdentifyRequest: message.AbstractIdentifyRequest{
 			Version:                 "1.5.2",
@@ -124,7 +147,18 @@ func (r *RMRemoting) RegisterResource(resource Resource) error {
 		},
 		ResourceIds: resource.GetResourceId(),
 	}
-	res, err := getty.GetGettyRemotingClient().SendSyncRequest(req)
+	target := "load-balanced session"
+	if session != nil {
+		target = session.RemoteAddr()
+	}
+	log.Infof("register RM resource, resourceId:%s, target:%s", resource.GetResourceId(), target)
+	var res interface{}
+	var err error
+	if session == nil {
+		res, err = getty.GetGettyRemotingClient().SendSyncRequest(req)
+	} else {
+		res, err = getty.GetGettyRemotingClient().SendSyncRequestToSession(req, session)
+	}
 	if err != nil {
 		log.Errorf("RegisterResourceManager error: {%#v}", err.Error())
 		return err

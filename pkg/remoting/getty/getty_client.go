@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 
+	dubboGetty "github.com/apache/dubbo-getty"
 	gxtime "github.com/dubbogo/gost/time"
 	"go.uber.org/atomic"
 
@@ -50,6 +51,16 @@ func GetGettyRemotingClient() *GettyRemotingClient {
 }
 
 func (client *GettyRemotingClient) SendAsyncRequest(msg interface{}) error {
+	return client.sendAsyncRequest(msg, nil)
+}
+
+// SendAsyncRequestToSession sends a request through the specified Seata Server
+// session. It is used for registration messages that must not be load balanced.
+func (client *GettyRemotingClient) SendAsyncRequestToSession(msg interface{}, session dubboGetty.Session) error {
+	return client.sendAsyncRequest(msg, session)
+}
+
+func (client *GettyRemotingClient) sendAsyncRequest(msg interface{}, session dubboGetty.Session) error {
 	var msgType message.GettyRequestType
 	if _, ok := msg.(message.HeartBeatMessage); ok {
 		msgType = message.GettyRequestTypeHeartbeatRequest
@@ -63,7 +74,7 @@ func (client *GettyRemotingClient) SendAsyncRequest(msg interface{}) error {
 		Compressor: 0,
 		Body:       msg,
 	}
-	return GetGettyRemotingInstance().SendASync(rpcMessage, nil, client.asyncCallback)
+	return GetGettyRemotingInstance().SendASync(rpcMessage, session, client.asyncCallback)
 }
 
 func (client *GettyRemotingClient) SendAsyncResponse(msgID int32, msg interface{}) error {
@@ -78,6 +89,16 @@ func (client *GettyRemotingClient) SendAsyncResponse(msgID int32, msg interface{
 }
 
 func (client *GettyRemotingClient) SendSyncRequest(msg interface{}) (interface{}, error) {
+	return client.sendSyncRequest(msg, nil)
+}
+
+// SendSyncRequestToSession sends a request through the specified Seata Server
+// session instead of selecting one through the load balancer.
+func (client *GettyRemotingClient) SendSyncRequestToSession(msg interface{}, session dubboGetty.Session) (interface{}, error) {
+	return client.sendSyncRequest(msg, session)
+}
+
+func (client *GettyRemotingClient) sendSyncRequest(msg interface{}, session dubboGetty.Session) (interface{}, error) {
 	rpcMessage := message.RpcMessage{
 		ID:         int32(client.idGenerator.Inc()),
 		Type:       message.GettyRequestTypeRequestSync,
@@ -85,7 +106,7 @@ func (client *GettyRemotingClient) SendSyncRequest(msg interface{}) (interface{}
 		Compressor: 0,
 		Body:       msg,
 	}
-	return GetGettyRemotingInstance().SendSync(rpcMessage, nil, client.syncCallback)
+	return GetGettyRemotingInstance().SendSync(rpcMessage, session, client.syncCallback)
 }
 
 func (g *GettyRemotingClient) asyncCallback(reqMsg message.RpcMessage, respMsg *message.MessageFuture) (interface{}, error) {

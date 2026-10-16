@@ -17,28 +17,32 @@
 
 package getty
 
-import "sync"
+import (
+	"sync"
+
+	dubboGetty "github.com/apache/dubbo-getty"
+)
 
 var (
 	sessionOpenHookMu sync.RWMutex
-	sessionOpenHook   func() error
+	sessionOpenHook   func(dubboGetty.Session) error
 )
 
 // SetSessionOpenHook registers work that must run after a new Getty session
 // is opened. The RM package uses this to re-register cached resources without
 // making the remoting package depend on the RM package.
-func SetSessionOpenHook(hook func() error) {
+func SetSessionOpenHook(hook func(dubboGetty.Session) error) {
 	sessionOpenHookMu.Lock()
 	sessionOpenHook = hook
 	sessionOpenHookMu.Unlock()
 }
 
-func runSessionOpenHook() error {
+func runSessionOpenHook(session dubboGetty.Session) error {
 	sessionOpenHookMu.RLock()
 	hook := sessionOpenHook
 	sessionOpenHookMu.RUnlock()
 	if hook == nil {
 		return nil
 	}
-	return hook()
+	return hook(session)
 }

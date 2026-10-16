@@ -70,13 +70,13 @@ func (g *gettyClientHandler) OnOpen(session getty.Session) error {
 			ApplicationId:           conf.ApplicationID,
 			TransactionServiceGroup: conf.TxServiceGroup,
 		}}
-		err := GetGettyRemotingClient().SendAsyncRequest(request)
+		err := GetGettyRemotingClient().SendAsyncRequestToSession(request, session)
 		if err != nil {
 			log.Errorf("register TM on session open error: {%#v}", err)
 			g.sessionManager.handleSessionFailure(session)
 			return
 		}
-		if err = runSessionOpenHook(); err != nil {
+		if err = runSessionOpenHook(session); err != nil {
 			log.Errorf("register cached RM resources on session open error: {%#v}", err)
 			g.sessionManager.handleSessionFailure(session)
 			return

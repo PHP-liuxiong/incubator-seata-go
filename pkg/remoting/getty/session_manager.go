@@ -259,6 +259,28 @@ func (g *SessionManager) startGettyClient(instance *discovery.ServiceInstance) g
 	return gettyClient
 }
 
+func (g *SessionManager) activeSessions() []getty.Session {
+	sessions := make([]getty.Session, 0)
+	g.allSessions.Range(func(key, _ interface{}) bool {
+		session, ok := key.(getty.Session)
+		if ok && !session.IsClosed() && g.isServerAddressAvailable(session.RemoteAddr()) {
+			sessions = append(sessions, session)
+		}
+		return true
+	})
+	return sessions
+}
+
+// GetActiveSessions returns the currently connected Seata Server sessions.
+// Callers that need a particular server must use the returned Session directly
+// instead of sending the request through the load balancer.
+func GetActiveSessions() []getty.Session {
+	if sessionManager == nil {
+		return nil
+	}
+	return sessionManager.activeSessions()
+}
+
 func (g *SessionManager) releaseServerAddress(address string) {
 	if clientAny, loaded := g.serverClients.LoadAndDelete(address); loaded {
 		if client, ok := clientAny.(closeableClient); ok {
